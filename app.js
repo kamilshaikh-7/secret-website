@@ -3,7 +3,9 @@ require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
 const ejs = require("ejs");
-const encrypt = require("mongoose-encryption");
+// const md5 = require("md5");  node module for hash function
+const bcrypt = require("bcrypt");
+const saltRounds = 10;
 
 const app = express();
 
@@ -18,10 +20,6 @@ const userSchema = mongoose.Schema({
     password: String
 });
 
-console.log(process.env.SECRET);
-userSchema.plugin(encrypt, { secret: process.env.SECRET, encryptedFields: ["password"] });
-
-
 const User = mongoose.model("User", userSchema);  
 
 app.get("/", function (req, res) {
@@ -33,19 +31,26 @@ app.get("/login", function (req, res) {
 app.get("/register", function (req, res) {
     res.render("register"); 
 });
+app.get("/submit", function (req, res) {
+    res.render("submit"); 
+});
 
 app.post("/register", function (req, res) {
-    const newUser = new User({
-        email: req.body.username,
-        password: req.body.password
-    }); 
-    newUser.save(function (err) {
-        if (!err) {
-            res.render("secrets");
-        } else {
-            console.log(err);
-        }
+
+    bcrypt.hash(req.body.password, saltRounds, function (err, hash) {
+        const newUser = new User({
+            email: req.body.username,
+            password: hash   //hash function converts plain password to hash
+        });
+        newUser.save(function (err) {
+            if (!err) {
+                res.render("secrets");
+            } else {
+                console.log(err);
+            }
+        });
     });
+    
 });
 
 app.post("/login", function (req, res) {
@@ -55,22 +60,22 @@ app.post("/login", function (req, res) {
     User.findOne({ email: username }, function (err, foundUser) {
         if (!err) {
             if (foundUser) {
-                if (foundUser.password === password) {
-                    console.log("User: "+username);
-                    // console.log("Password: "+password);
-                    res.render("secrets");
-                } else {
-                    res.render("login", { errLine: "Email or Password does not match" });
-                }
+                bcrypt.compare(password, foundUser.password, function (err, result) {
+                    if (result === true) {
+                        res.render("secrets");
+                    } else {
+                        res.render("login", { errLine: "Email or Password does not match" });
+                    }
+                });
             }
             else {
-                res.render("login", {errLine: "Email or Password does not match"});
+                res.render("login", { errLine: "Email or Password does not match" });
             }
         } else {
             console.log(err);
         }
-    })
-})
+    });
+});
 
 app.listen(3000, function () {
     console.log("Server running on port 3000");
